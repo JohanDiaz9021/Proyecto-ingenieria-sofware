@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7.0
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+
+  users-api:
+    build:
+      context: ./users-api
+    container_name: users-api
+    environment:
+      - JWT_SECRET=myfancysecret
+      - SERVER_PORT=8083
+      - SPRING_ZIPKIN_BASEURL=http://zipkin:9411/
+    ports:
+      - "8083:8083"
+    depends_on:
+      - zipkin
+
+  auth-api:
+    build:
+      context: ./auth-api
+    container_name: auth-api
+    environment:
+      - AUTH_API_PORT=8081
+      - USERS_API_ADDRESS=http://users-api:8083
+      - JWT_SECRET=myfancysecret
+      - ZIPKIN_URL=http://zipkin:9411/api/v2/spans
+    ports:
+      - "8081:8081"
+    depends_on:
+      - users-api
+      - zipkin
+
+  todos-api:
+    build:
+      context: ./todos-api
+    container_name: todos-api
+    environment:
+      - TODO_API_PORT=8082
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=log_channel
+      - JWT_SECRET=myfancysecret
+      - ZIPKIN_URL=http://zipkin:9411/api/v2/spans
+    ports:
+      - "8082:8082"
+    depends_on:
+      - redis
+      - zipkin
+
+  log-message-processor:
+    build:
+      context: ./log-message-processor
+    container_name: log-message-processor
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=log_channel
+      - ZIPKIN_URL=http://zipkin:9411/api/v2/spans
+    depends_on:
+      - redis
+      - zipkin
